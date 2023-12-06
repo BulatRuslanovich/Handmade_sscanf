@@ -45,4 +45,9 @@ void parseSpecifier(char **formatPtr, token *result);
 int writeTokensToMemory(char **strPtr, token *tokens, int tokenLen);
 int writeCharToMem(char **str, token *tok);
 int writeStringToMem(char **str, token *tok);
+
+void writeAcceptToBuffer(char **str, const char *accept, char *buffer, int width, int startIndex);
+int writeIntToMem(char **str, token *tok);
+
+void intConverter(token *tok, long long int result);
 #endif

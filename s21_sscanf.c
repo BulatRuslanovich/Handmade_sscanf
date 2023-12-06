@@ -1,5 +1,5 @@
 #include "s21_sscanf.h"
-
+#include <limits.h>
 
 int s21_sscanf(const char *str, const char *format, ...) {
   int errCode = checkEOFString(str);
@@ -167,10 +167,11 @@ int writeTokensToMemory(char **strPtr, token *tokens, int tokenLen) {
     char spec = tokens[i].spec;
 
     if (spec == 'c') {
-		errCode = writeCharToMem(strPtr, &tokens[i]);
+      errCode = writeCharToMem(strPtr, &tokens[i]);
     }
 
     if (spec == 'd') {
+      errCode = writeIntToMem(strPtr, &tokens[i]);
     }
 
     if (spec == 'i' || spec == 'p') {
@@ -180,7 +181,7 @@ int writeTokensToMemory(char **strPtr, token *tokens, int tokenLen) {
     }
 
     if (spec == 's') {
-		errCode = writeStringToMem(strPtr, &tokens[i]);
+      errCode = writeStringToMem(strPtr, &tokens[i]);
     }
 
     if (spec == 'x' || spec == 'X') {
@@ -200,75 +201,134 @@ int writeTokensToMemory(char **strPtr, token *tokens, int tokenLen) {
     }
 
     if (spec == 'n') {
+      *((int *)tokens[i].address) = (*strPtr) - start;
     }
   }
 }
 
 int writeCharToMem(char **str, token *tok) {
-	int codeErr = ERROR;
+  int codeErr = ERROR;
 
-	if (**str) {
-		codeErr = OK;
+  if (**str) {
+    codeErr = OK;
 
-		if (tok->width == WIDTH_STAR) {
-			(*str)++;
-		} else {
-			*(char*)tok->address = **str;
-			(*str)++;
-		}
-	}
+    if (tok->width == WIDTH_STAR) {
+      (*str)++;
+    } else {
+      *(char *)tok->address = **str;
+      (*str)++;
+    }
+  }
 
-	return codeErr;
+  return codeErr;
 }
 
 int writeStringToMem(char **str, token *tok) {
-	int codeErr = ERROR;
-	size_t i = 0;
-	char buffer[BUFF_SIZE] = {0};
-	int isStr = 0;
-	int isEndOfString = 0;
+  int codeErr = ERROR;
+  size_t i = 0;
+  char buffer[BUFF_SIZE] = {0};
+  int isStr = 0;
+  int isEndOfString = 0;
 
-	while (**str && !isStr) //пока строка не закончилась и он не нашел начало слова
-	{
-		if (!isSpace(**str)) {
-			isStr = 1;
+  while (**str &&
+         !isStr)  // пока строка не закончилась и он не нашел начало слова
+  {
+    if (!isSpace(**str)) {
+      isStr = 1;
 
-			while (**str && !isEndOfString)
-			{
-				buffer[i] = **str;
-				i++;
+      while (**str && !isEndOfString) {
+        buffer[i] = **str;
+        i++;
 
-				if (tok->widthType == WIDTH_NUMBER && i >= tok->width) {
-					isEndOfString = 1;
-				}
+        if (tok->widthType == WIDTH_NUMBER && i >= tok->width) {
+          isEndOfString = 1;
+        } else {
+          (*str)++;
 
-				(*str)++;
+          if (isSpace(**str)) {
+            isEndOfString = 1;
+          }
+        }
+      }
 
-				if (isSpace(**str)) {
-					(*str)--;
-					isEndOfString = 1;
-				}
-
-			}
-			
-			
-		}
-
-		(*str)++;
-	}
-
-
-	if (tok->widthType != WIDTH_STAR && isStr) {
-        strcpy((char *)tok->address, buffer);
+      isEndOfString = 1;
     }
 
-	return codeErr;
+    if (isEndOfString == 0) {
+      (*str)++;
+    }
+  }
+
+  if (tok->widthType != WIDTH_STAR && isStr) {
+    strcpy((char *)tok->address, buffer);
+  }
+
+  return codeErr;
 }
 
+int writeIntToMem(char **str, token *tok) {
+  long long int result = 0;
+  int codeErr = ERROR;
+  char buffer[BUFF_SIZE] = {0};
+
+  if (strspn(*str, "0987654321+-")) {
+    int signCount = strspn(*str, "+-");
+
+    if (!(signCount > 1 ||
+          (signCount && (tok->widthType && tok->width <= 1)))) {
+      buffer[0] = **str;
+      (*str)++;
+      writeAcceptToBuffer(str, "0987654321", buffer, tok->width, 1);
+      codeErr = OK;
+    }
+  }
+
+  result = atoi(buffer);
+
+  // TODO: для spec p реализовать перевод буфера в 16 систему
+
+  if (tok->widthType != WIDTH_STAR && codeErr == OK) {
+    intConverter(tok, result);
+  }
+
+  if (tok->widthType != WIDTH_NUMBER)
+    writeAcceptToBuffer(str, "0123456789", NULL, 0, 0);  //! пока не понятно
+
+  return codeErr;
+}
+
+void writeAcceptToBuffer(char **str, const char *accept, char *buffer,
+                         int width, int startIndex) {
+  int isEnd = 0;
+  while (**str && strspn(*str, accept)) {
+    if ((width && startIndex >= width) || (isSpace(**str))) {
+      isEnd = 1;
+    } else {
+      if (buffer) {
+        buffer[startIndex] = **str;
+        (*str)++;
+        startIndex++;
+      }
+    }
+  }
+}
+
+void intConverter(token *tok, long long int result) {
+  if (tok->spec != 'p') {  //! пока бесполезная проверка
+    if (tok->lengthType == NONE_LENGTH) {
+      *(int *)tok->address = (int)result;
+    } else if (tok->lengthType == LENGTH_SHORT) {
+      *(short int *)tok->address = (short int)result;
+    } else if (tok->lengthType == LENGTH_LONG) {
+      *(long int *)tok->address = (long int)result;
+    } else if (tok->lengthType == LENGTH_LONG_LONG || tok->lengthType == LENGTH_LONG_DOUBLE) {
+      *(long long int *)tok->address = (long long int)result;
+    }
+  }
+}
 
 int main() {
-	char* test_char;
-	s21_sscanf("lopata", "%s", test_char);
-
-	printf("%s\n", test_char);
+  return 0;
 }
+
+//! пофиксить ширину у инта
